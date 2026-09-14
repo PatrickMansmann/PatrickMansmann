@@ -1,0 +1,60 @@
+name: CI Pipeline
+
+on:
+  - push
+  - pull_request
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.runtime }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime:
+          - stable
+          - oldstable
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.runtime }}
+          cache: false
+
+      - name: Install Go dependencies
+        if: hashFiles('go.mod') != ''
+        run: go mod download
+
+      - name: Check Go formatting
+        if: hashFiles('go.mod') != ''
+        run: test -z "$(gofmt -l .)"
+
+      - name: Build Go package
+        if: hashFiles('go.mod') != ''
+        run: go build ./...
+
+      - name: Run Go tests
+        if: hashFiles('go.mod') != ''
+        run: go test ./...
+
+      - name: Test summary
+        if: always()
+        run: |
+          {
+            echo '### CI Pipeline Summary'
+            echo ''
+            echo '| Runtime | Outcome |'
+            echo '| --- | --- |'
+            echo "| stable | \${{ steps.setup-go-stable.outcome }} |"
+            echo "| oldstable | \${{ steps.setup-go-oldstable.outcome }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
